@@ -22,7 +22,7 @@ interface BackendSettings {
   mic_device: string;
   prompt: string;
   inject_status: boolean;
-  ptt_gamepad_button: number | null;
+  ptt_gamepad_combo: string[];
   has_api_key: boolean;
 }
 interface Status {
@@ -39,77 +39,6 @@ const setSetting = callable<[string, unknown], boolean>("set_setting");
 const setEnabled = callable<[boolean], boolean>("set_enabled");
 const beginCapturePtt = callable<[number?], number | null>("begin_capture_ptt");
 const getStatus = callable<[], Status>("get_status");
-const startDictation = callable<[], boolean>("start_dictation");
-const stopDictation = callable<[], boolean>("stop_dictation");
-
-// Friendly names for known Steam controller button ids (others show as #N).
-const GAMEPAD_NAMES: Record<number, string> = { 44: "L5" };
-function padLabel(btn: number | null): string {
-  if (btn === null || btn === undefined) return "not set";
-  return GAMEPAD_NAMES[btn] ?? `button #${btn}`;
-}
-
-// Controller PTT via Steam's own input API. Steam Input button presses never
-// reach the kernel evdev layer (Gamescope handles them above it), so we listen
-// through SteamClient.Input instead. Registered at PLUGIN scope (see
-// definePlugin) so it keeps listening while the panel is closed / in-game.
-class ControllerPTT {
-  registered = false;
-  private reg: { unregister?: () => void } | null = null;
-  button: number | null = null;   // configured PTT button id
-  enabled = false;
-  private held = false;
-  capturing = false;
-  onCapture: ((btn: number) => void) | null = null;
-
-  register() {
-    if (this.registered) return;
-    try {
-      const input = (window as unknown as { SteamClient?: any }).SteamClient?.Input;
-      if (!input?.RegisterForControllerInputMessages) {
-        console.error("[WhisPTT] SteamClient.Input.RegisterForControllerInputMessages not found");
-        return;
-      }
-      this.reg = input.RegisterForControllerInputMessages(
-        (_idx: number, button: number, pressed: boolean) => this.onButton(button, pressed),
-      );
-      this.registered = true;
-      console.log("[WhisPTT] controller input registered");
-    } catch (e) {
-      console.error("[WhisPTT] controller register failed", e);
-    }
-  }
-
-  unregister() {
-    try {
-      this.reg?.unregister?.();
-    } catch {
-      /* ignore */
-    }
-    this.reg = null;
-    this.registered = false;
-  }
-
-  private onButton(button: number, pressed: boolean) {
-    if (this.capturing) {
-      if (pressed) {
-        this.capturing = false;
-        this.button = button;
-        this.onCapture?.(button);
-      }
-      return;
-    }
-    if (!this.enabled || this.button === null || button !== this.button) return;
-    if (pressed && !this.held) {
-      this.held = true;
-      startDictation();
-    } else if (!pressed && this.held) {
-      this.held = false;
-      stopDictation();
-    }
-  }
-}
-const controller = new ControllerPTT();
 
 const MODELS = [
   { label: "GPT-4o mini transcribe (fast, cheap)", data: "gpt-4o-mini-transcribe" },
@@ -119,6 +48,12 @@ const MODELS = [
 const OUTPUT_MODES = [
   { label: "Type into focused field", data: "type" },
   { label: "Copy to clipboard", data: "clipboard" },
+];
+
+// Gamepad inputs available for the PTT combo (names match the backend map).
+// The chord is read off Steam's virtual X-Box 360 pad while in-game.
+const GAMEPAD_BUTTONS = [
+  "SELECT", "START", "L1", "R1", "L2", "R2", "L3", "R3", "A", "B", "X", "Y",
 ];
 
 // A few friendly names for common Linux keycodes; fall back to the number.
@@ -137,15 +72,8 @@ function Content() {
   const [status, setStatus] = useState<Status | null>(null);
   const [apiKey, setApiKey] = useState("");
   const [capturing, setCapturing] = useState(false);
-  const [capturingPad, setCapturingPad] = useState(false);
 
-  const refresh = async () => {
-    const next = await getSettings();
-    // Keep the plugin-scope controller listener in sync with settings.
-    controller.enabled = next.enabled;
-    controller.button = next.ptt_gamepad_button;
-    setS(next);
-  };
+  const refresh = async () => setS(await getSettings());
 
   useEffect(() => {
     refresh();
@@ -176,22 +104,12 @@ function Content() {
     }
   };
 
-  const onSetPad = () => {
-    setCapturingPad(true);
-    controller.capturing = true;
-    controller.onCapture = (btn) => {
-      controller.onCapture = null;
-      setCapturingPad(false);
-      void update("ptt_gamepad_button", btn);
-    };
-    // Give up if no button is pressed within 10s.
-    setTimeout(() => {
-      if (controller.capturing) {
-        controller.capturing = false;
-        controller.onCapture = null;
-        setCapturingPad(false);
-      }
-    }, 10000);
+  const combo = s.ptt_gamepad_combo ?? [];
+  const noTrigger = s.ptt_keycode === null && combo.length === 0;
+
+  const toggleComboButton = async (btn: string, on: boolean) => {
+    const next = on ? [...combo, btn] : combo.filter((b) => b !== btn);
+    await update("ptt_gamepad_combo", next);
   };
 
   return (
@@ -201,12 +119,12 @@ function Content() {
           <ToggleField
             label="Enabled"
             description={
-              s.ptt_keycode === null && s.ptt_gamepad_button === null
-                ? "Set a PTT key or controller button first"
+              noTrigger
+                ? "Set a PTT key or controller combo first"
                 : "Hold your PTT trigger to dictate"
             }
             checked={s.enabled}
-            disabled={s.ptt_keycode === null && s.ptt_gamepad_button === null}
+            disabled={noTrigger}
             onChange={async (v) => {
               await setEnabled(v);
               await refresh();
@@ -214,27 +132,43 @@ function Content() {
           />
         </PanelSectionRow>
         <PanelSectionRow>
-          <ButtonItem
-            layout="below"
-            onClick={onSetPtt}
-            disabled={capturing}
-          >
+          <ButtonItem layout="below" onClick={onSetPtt} disabled={capturing}>
             {capturing
               ? "Press your PTT key now…"
               : `PTT key (keyboard/touch): ${keyLabel(s.ptt_keycode)}  (tap to change)`}
           </ButtonItem>
         </PanelSectionRow>
+        {s.ptt_keycode !== null && !capturing ? (
+          <PanelSectionRow>
+            <ButtonItem layout="below" onClick={() => update("ptt_keycode", null)}>
+              Clear PTT key
+            </ButtonItem>
+          </PanelSectionRow>
+        ) : null}
         <PanelSectionRow>
-          <ButtonItem
-            layout="below"
-            onClick={onSetPad}
-            disabled={capturingPad}
-          >
-            {capturingPad
-              ? "Press a controller button now…"
-              : `PTT controller button: ${padLabel(s.ptt_gamepad_button)}  (tap to set)`}
-          </ButtonItem>
+          <Field label="Controller combo" focusable={false}>
+            {combo.length ? combo.join(" + ") : "none"}
+          </Field>
         </PanelSectionRow>
+      </PanelSection>
+
+      <PanelSection title="Controller combo (hold all to talk)">
+        <PanelSectionRow>
+          <div style={{ fontSize: "12px", opacity: 0.7 }}>
+            Read off the virtual gamepad in-game. Map one physical button in
+            Steam Input to emit this exact combo (e.g. a back grip → Select+R3);
+            pick a combo no game uses so it stays conflict-free.
+          </div>
+        </PanelSectionRow>
+        {GAMEPAD_BUTTONS.map((b) => (
+          <PanelSectionRow key={b}>
+            <ToggleField
+              label={b}
+              checked={combo.includes(b)}
+              onChange={(v) => toggleComboButton(b, v)}
+            />
+          </PanelSectionRow>
+        ))}
       </PanelSection>
 
       <PanelSection title="Status">
@@ -322,23 +256,9 @@ function Content() {
   );
 }
 
-export default definePlugin(() => {
-  // Register at plugin scope so controller PTT works with the panel closed.
-  controller.register();
-  getSettings()
-    .then((s) => {
-      controller.enabled = s.enabled;
-      controller.button = s.ptt_gamepad_button;
-    })
-    .catch(() => {});
-
-  return {
-    name: "WhisPTT",
-    titleView: <div className={staticClasses.Title}>WhisPTT</div>,
-    content: <Content />,
-    icon: <FaMicrophone />,
-    onDismount() {
-      controller.unregister();
-    },
-  };
-});
+export default definePlugin(() => ({
+  name: "WhisPTT",
+  titleView: <div className={staticClasses.Title}>WhisPTT</div>,
+  content: <Content />,
+  icon: <FaMicrophone />,
+}));

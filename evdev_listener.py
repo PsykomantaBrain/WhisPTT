@@ -12,6 +12,7 @@ import struct
 import threading
 
 EV_KEY = 0x01
+EV_ABS = 0x03
 
 # Same input_event layout as uinput_kbd; x86_64 Linux (timeval = 2x long).
 _EVENT_FMT = "llHHi"
@@ -29,8 +30,12 @@ class EvdevListener:
         self.on_press = on_press
         self.on_release = on_release
         self.on_capture = on_capture        # callback(keycode), one-shot
-        self.target_code = None             # None => react to nothing
+        self.target_code = None             # single keycode (keyboard/touch)
         self.capture_mode = False
+        self.combo = []                     # gamepad chord components
+        self._combo_state = []              # held-state per component
+        self._combo_active = False
+        self._combo_has_abs = False
         self._stop = threading.Event()
         self._thread = None
         self._fds = {}                      # fd -> path
@@ -38,6 +43,21 @@ class EvdevListener:
 
     def set_target(self, code):
         self.target_code = int(code) if code is not None else None
+
+    def set_combo(self, components):
+        """Configure a gamepad chord; PTT fires when ALL components are held.
+
+        components: list of dicts, each either
+          {"type": "key", "code": N}                      (a button)
+          {"type": "abs", "code": N, "min": v}            (trigger/stick: held
+          {"type": "abs", "code": N, "max": v}             when value >=min / <=max)
+        Matched by code across every device (only the gamepad emits these), so
+        it's independent of which /dev/input/eventN the pad happens to be.
+        """
+        self.combo = list(components or [])
+        self._combo_state = [False] * len(self.combo)
+        self._combo_active = False
+        self._combo_has_abs = any(c.get("type") == "abs" for c in self.combo)
 
     def start_capture(self):
         self.capture_mode = True
@@ -102,12 +122,15 @@ class EvdevListener:
                         _EVENT_FMT, data[i:i + _EVENT_SIZE]
                     )
                     if etype == EV_KEY:
-                        self._handle(code, value)
+                        self._handle_key(code, value)
+                        self._handle_combo(EV_KEY, code, value)
+                    elif etype == EV_ABS and self._combo_has_abs:
+                        self._handle_combo(EV_ABS, code, value)
                 self._bufs[fd] = data[n:]
         self._close()
 
-    def _handle(self, code, value):
-        # value: 1 = press, 0 = release, 2 = autorepeat
+    def _handle_key(self, code, value):
+        # Single keycode PTT (keyboard/touch) + capture. value: 1=press 0=release
         if self.capture_mode:
             if value == 1:
                 self.capture_mode = False
@@ -120,3 +143,33 @@ class EvdevListener:
             self.on_press()
         elif value == 0 and self.on_release:
             self.on_release()
+
+    def _handle_combo(self, etype, code, value):
+        # Gamepad chord: fire on_press when every component is held, on_release
+        # when any lifts. Capture mode is keyboard-only, so skip combos then.
+        if not self.combo or self.capture_mode:
+            return
+        changed = False
+        for i, comp in enumerate(self.combo):
+            if comp.get("type") == "key" and etype == EV_KEY and code == comp.get("code"):
+                self._combo_state[i] = value != 0   # 1 press, 2 autorepeat, 0 up
+                changed = True
+            elif comp.get("type") == "abs" and etype == EV_ABS and code == comp.get("code"):
+                pressed = True
+                if "min" in comp and value < comp["min"]:
+                    pressed = False
+                if "max" in comp and value > comp["max"]:
+                    pressed = False
+                self._combo_state[i] = pressed
+                changed = True
+        if not changed:
+            return
+        all_pressed = all(self._combo_state)
+        if all_pressed and not self._combo_active:
+            self._combo_active = True
+            if self.on_press:
+                self.on_press()
+        elif not all_pressed and self._combo_active:
+            self._combo_active = False
+            if self.on_release:
+                self.on_release()

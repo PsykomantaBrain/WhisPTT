@@ -39,7 +39,7 @@ DEFAULTS = {
     "mic_device": "",          # "" = default source
     "prompt": "",              # optional vocabulary bias
     "inject_status": True,     # type a placeholder caption while recording
-    "ptt_gamepad_button": None,  # Steam controller button id (matched in frontend)
+    "ptt_gamepad_combo": [],   # gamepad button names; PTT = hold all together
 }
 
 # Shown in the focused field while recording, then backspaced away and
@@ -47,6 +47,31 @@ DEFAULTS = {
 # skipped, which would throw off the backspace count) and contain no newline
 # (our typer maps "\n" to Enter, which would submit it).
 STATUS_CAPTION = "[recording...]"
+
+# Steam's virtual X-Box 360 pad button codes (evdev BTN_*), confirmed on a
+# Steam Deck. The chord is read passively off the pad, so pick a combo no game
+# binds (e.g. a Steam Input layer that emits SELECT+R3 from one physical button).
+GAMEPAD_BUTTONS = {
+    "A": 304, "B": 305, "X": 307, "Y": 308,
+    "L1": 310, "R1": 311, "SELECT": 314, "START": 315,
+    "L3": 317, "R3": 318,
+}
+# Analog triggers are EV_ABS axes; "pressed" past the half-way threshold.
+GAMEPAD_TRIGGERS = {"L2": 2, "R2": 5}   # ABS_Z, ABS_RZ
+TRIGGER_THRESHOLD = 128
+
+
+def _combo_components(names):
+    """Map button names to evdev_listener combo components."""
+    comps = []
+    for raw in names or []:
+        n = str(raw).upper()
+        if n in GAMEPAD_BUTTONS:
+            comps.append({"type": "key", "code": GAMEPAD_BUTTONS[n]})
+        elif n in GAMEPAD_TRIGGERS:
+            comps.append({"type": "abs", "code": GAMEPAD_TRIGGERS[n],
+                          "min": TRIGGER_THRESHOLD})
+    return comps
 
 
 class Plugin:
@@ -77,10 +102,18 @@ class Plugin:
         )
         self.listener.start()
         if self.settings.get("enabled"):
-            code = self.settings.get("ptt_keycode")
-            if code is not None:
-                self.listener.set_target(int(code))
+            self._apply_triggers()
         decky.logger.info("WhisPTT ready (rec tool: %s)", Recorder().tool)
+
+    def _apply_triggers(self):
+        """Arm both PTT triggers (keyboard keycode + gamepad chord)."""
+        code = self.settings.get("ptt_keycode")
+        self.listener.set_target(int(code) if code is not None else None)
+        self.listener.set_combo(_combo_components(self.settings.get("ptt_gamepad_combo")))
+
+    def _clear_triggers(self):
+        self.listener.set_target(None)
+        self.listener.set_combo([])
 
     async def _unload(self):
         decky.logger.info("WhisPTT unloading")
@@ -240,18 +273,17 @@ class Plugin:
 
     async def set_setting(self, key, value):
         self.settings.set(key, value)
-        if key == "ptt_keycode" and self.settings.get("enabled"):
-            self.listener.set_target(int(value) if value is not None else None)
+        if key in ("ptt_keycode", "ptt_gamepad_combo") and self.settings.get("enabled"):
+            self._apply_triggers()
         return True
 
     async def set_enabled(self, enabled):
         enabled = bool(enabled)
         self.settings.set("enabled", enabled)
         if enabled:
-            code = self.settings.get("ptt_keycode")
-            self.listener.set_target(int(code) if code is not None else None)
+            self._apply_triggers()
         else:
-            self.listener.set_target(None)
+            self._clear_triggers()
         return True
 
     async def begin_capture_ptt(self, timeout=10):
@@ -279,15 +311,5 @@ class Plugin:
             "ptt_keycode": self.settings.get("ptt_keycode"),
             "rec_tool": Recorder().tool,
             "busy": self.busy,
+            "ptt_gamepad_combo": self.settings.get("ptt_gamepad_combo"),
         }
-
-    # Triggered from the frontend controller listener (Steam Input API), which
-    # detects gamepad buttons that never reach the kernel evdev layer. Drives
-    # the same record/transcribe/inject pipeline as the evdev PTT path.
-    async def start_dictation(self):
-        self._on_ptt_press()
-        return True
-
-    async def stop_dictation(self):
-        self._on_ptt_release()
-        return True
