@@ -38,7 +38,15 @@ DEFAULTS = {
     "output_mode": "type",     # "type" | "clipboard"
     "mic_device": "",          # "" = default source
     "prompt": "",              # optional vocabulary bias
+    "inject_status": True,     # type a placeholder caption while recording
+    "ptt_gamepad_button": None,  # Steam controller button id (matched in frontend)
 }
+
+# Shown in the focused field while recording, then backspaced away and
+# replaced by the transcription. Must be ASCII (so nothing is silently
+# skipped, which would throw off the backspace count) and contain no newline
+# (our typer maps "\n" to Enter, which would submit it).
+STATUS_CAPTION = "[recording...]"
 
 
 class Plugin:
@@ -60,6 +68,7 @@ class Plugin:
         self.last_text = ""
         self.busy = False
         self._capture_future = None
+        self._caption_chars = 0    # chars of STATUS_CAPTION currently in the field
 
         self.listener = EvdevListener(
             on_press=self._on_ptt_press,
@@ -104,6 +113,17 @@ class Plugin:
                 return
             self.recorder.start()
             self._set_status("recording")
+            self._caption_chars = 0
+            # Show an in-field caption so you get feedback without the QAM open.
+            # Only meaningful when we're typing the result into the field.
+            if (self.settings.get("inject_status")
+                    and self.settings.get("output_mode") == "type"):
+                try:
+                    skipped = self._ensure_kbd().type_text(STATUS_CAPTION)
+                    self._caption_chars = len(STATUS_CAPTION) - skipped
+                except Exception:  # noqa: BLE001
+                    decky.logger.exception("status caption inject failed")
+                    self._caption_chars = 0
         except Exception as e:  # noqa: BLE001
             decky.logger.exception("record start failed")
             self._set_status("error: " + str(e))
@@ -116,6 +136,11 @@ class Plugin:
 
     def _process_release(self):
         self.busy = True
+        # Capture the caption length up front; clear it before typing the
+        # result, and the `finally` mops it up on any error/early-return so we
+        # never strand "[recording...]" in the field.
+        caption_n = self._caption_chars
+        self._caption_chars = 0
         try:
             self._set_status("transcribing")
             rec = self.recorder
@@ -151,6 +176,10 @@ class Plugin:
                 self._set_status("idle (no speech)")
                 return
 
+            # Erase the caption, then type/copy the real text.
+            if caption_n:
+                self._backspace(caption_n)
+                caption_n = 0
             if self.settings.get("output_mode") == "type":
                 self._type_text(text)
             else:
@@ -160,6 +189,11 @@ class Plugin:
             decky.logger.exception("release processing failed")
             self._set_status("error: " + str(e))
         finally:
+            if caption_n:
+                try:
+                    self._backspace(caption_n)
+                except Exception:  # noqa: BLE001
+                    decky.logger.exception("caption cleanup failed")
             self.busy = False
 
     def _on_capture(self, code):
@@ -168,10 +202,20 @@ class Plugin:
         self._capture_future = None
 
     # ---------------- output ----------------
-    def _type_text(self, text):
+    def _ensure_kbd(self):
+        # NB: the virtual keyboard is created lazily here, which is always
+        # AFTER the evdev listener has enumerated input devices (it starts in
+        # _main). So the listener never watches our own device, and injected
+        # keystrokes can't be misread as PTT events. Keep it that way.
         if self.kbd is None:
             self.kbd = UInputKeyboard()
-        skipped = self.kbd.type_text(text)
+        return self.kbd
+
+    def _backspace(self, n):
+        self._ensure_kbd().backspace(n)
+
+    def _type_text(self, text):
+        skipped = self._ensure_kbd().type_text(text)
         if skipped:
             decky.logger.info("typed transcript, skipped %d non-ASCII char(s)", skipped)
 
@@ -236,3 +280,14 @@ class Plugin:
             "rec_tool": Recorder().tool,
             "busy": self.busy,
         }
+
+    # Triggered from the frontend controller listener (Steam Input API), which
+    # detects gamepad buttons that never reach the kernel evdev layer. Drives
+    # the same record/transcribe/inject pipeline as the evdev PTT path.
+    async def start_dictation(self):
+        self._on_ptt_press()
+        return True
+
+    async def stop_dictation(self):
+        self._on_ptt_release()
+        return True

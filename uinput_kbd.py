@@ -97,6 +97,7 @@ _PUNCT = {
 KEY_SPACE = 57
 KEY_ENTER = 28
 KEY_TAB = 15
+KEY_BACKSPACE = 14
 
 CHAR_MAP = {}
 for _c, _code in _LETTER_CODES.items():
@@ -179,6 +180,13 @@ class UInputKeyboard:
             if delay:
                 time.sleep(delay)
         return skipped
+
+    def backspace(self, count, delay=0.004):
+        """Send `count` backspaces (to erase previously-typed text)."""
+        for _ in range(max(0, int(count))):
+            self._tap(KEY_BACKSPACE)
+            if delay:
+                time.sleep(delay)
 
     def close(self):
         if self.fd is not None:
