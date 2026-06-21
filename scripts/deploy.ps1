@@ -80,6 +80,7 @@ $cmd = @(
   "sudo rm -rf '$dest'",
   "sudo mv '$remoteTmp' '$dest'",
   "sudo chown -R root:root '$dest'",
+  "sudo chmod -R a+rX '$dest'",      # root-owned but world-readable (match stock plugins; Dolphin can browse)
   "sudo systemctl restart plugin_loader"
 ) -join " && "
 Write-Host "==> installing on Deck + restarting Decky (enter sudo password)..." -ForegroundColor Cyan
