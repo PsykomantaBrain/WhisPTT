@@ -1,73 +1,84 @@
 # WhisPTT
 
 Push-to-talk voice dictation for the Steam Deck. Hold a button, speak, release —
-your words are transcribed by the OpenAI Whisper API and typed straight into the
-focused field.
+your words are transcribed by OpenAI Whisper and typed straight into the focused
+text field: game chat, search boxes, anything you can type into.
 
-## How it works
+<!-- TODO: add assets/thumbnail.png and uncomment -->
+<!-- ![WhisPTT](assets/thumbnail.png) -->
 
-```
-PTT key down ──► record mic (pw-record → 16kHz mono WAV)
-PTT key up   ──► stop ──► POST to OpenAI /v1/audio/transcriptions ──► type keystrokes
-```
+## Features
 
-- **Frontend** (`src/index.tsx`, `@decky/ui` + React): Quick Access panel —
-  enable toggle, PTT-key capture, model / output / language settings, live status.
-- **Backend** (`main.py` + sibling modules, runs as **root**):
-  - `evdev_listener.py` — watches `/dev/input/event*` globally for the PTT key
-    (press/release), below Gamescope, no matter what's focused. Pure Python.
-  - `recorder.py` — `pw-record` → `parecord` → `arecord` fallback chain.
-  - `transcriber.py` — hand-rolled multipart POST to OpenAI (stdlib only).
-  - `uinput_kbd.py` — virtual keyboard via `/dev/uinput` to inject keystrokes.
-    Pure Python (struct + ioctl) — **nothing to compile for SteamOS**.
+- **Push-to-talk dictation** — hold your trigger, speak, release; the text lands
+  wherever your cursor is.
+- **Input options that cover every Deck context:**
+  - **Controller combo** — read straight off the gamepad, so it works **in-game**.
+    Map one physical button in Steam Input to emit a chord (e.g. Select + R3).
+  - **Keyboard / touchscreen** — works in the **Steam UI**: Quick Access Menu,
+    Gaming Mode menus, even the on-screen keyboard.
+  - **USB keyboard when docked** — just bind a normal key.
+- **In-field status caption** — shows `[recording...]` while you talk, then
+  replaces it with your transcription.
+- **Type into the field, or copy to clipboard.**
+- **Model & language choice** — defaults to `gpt-4o-mini-transcribe` (fast, cheap).
 
-The PTT key is whatever you bind in **Steam Input** (e.g. a controller chord →
-a keyboard key). WhisPTT just watches that one keycode. Opening chat / submitting
-text stays per-game in your Steam Input layout — WhisPTT only produces the text.
+## Requirements
 
-## Build
+- [Decky Loader](https://decky.xyz) on your Steam Deck.
+- An **OpenAI API key** with billing enabled (platform.openai.com). The API is
+  pay-as-you-go and **separate from any ChatGPT subscription**. Transcription is
+  very cheap — a fraction of a cent per dictation with `gpt-4o-mini-transcribe`.
+- A network connection (audio is sent to OpenAI to transcribe).
+
+## Setup
+
+1. Install WhisPTT (Decky store, or manually — see [Development](#development)).
+2. Open the **WhisPTT** panel in the Quick Access Menu.
+3. **Save your OpenAI API key.**
+4. Bind a trigger:
+   - **Controller:** in the *Controller combo* section, toggle the buttons that
+     form your chord. Then, in **Steam Input**, map one physical button (a back
+     grip works great) to emit that exact chord as gamepad output. Pick a
+     "physically impossible" combo like **Select + R3** — no game binds it, so
+     it never conflicts.
+   - **Keyboard / touch:** tap **PTT key** and press a key (or touch the screen).
+5. Turn **Enabled** on. Hold your trigger, speak, release.
+
+## Privacy
+
+Audio you dictate is sent to OpenAI's transcription API over HTTPS and is
+subject to [OpenAI's data policies](https://openai.com/policies). Your API key
+is stored locally on the Deck, owner-readable only (`0600`), and is sent only as
+the API `Authorization` header — never anywhere else.
+
+## Limitations
+
+- Typed output uses a **US keyboard layout** and covers printable ASCII;
+  characters outside that set are skipped when typing. Switch **Output → Copy to
+  clipboard** to preserve full Unicode.
+- The controller combo is read **passively** from the virtual gamepad, so the
+  game also receives those buttons. Pick a combo the game doesn't use (the whole
+  point of the "impossible chord" trick above).
+
+## Development
+
+Built with the Decky toolchain (`@decky/ui`, `@decky/api`, rollup) and a
+**pure-stdlib Python backend** — no native dependencies, nothing to compile for
+SteamOS.
 
 ```bash
 pnpm install
 pnpm run build      # emits dist/index.js
 ```
 
-## Deploy to the Deck
+Deploy to a Deck over SSH (Windows): `scripts/deploy.ps1 -Deck deck@<ip>`, or
+copy the built plugin folder (`dist/`, `*.py`, `plugin.json`, `package.json`)
+into `~/homebrew/plugins/WhisPTT/` and restart `plugin_loader`.
 
-Copy the plugin folder to `~/homebrew/plugins/WhisPTT/` on the Deck (it needs
-`plugin.json`, `dist/`, `main.py`, and the `*.py` modules), then restart Decky
-(or use the Decky CLI / VS Code "deploy" task). The backend runs as root because
-`plugin.json` declares `"flags": ["root"]` — required for `/dev/uinput` and
-`/dev/input/event*`.
-
-## First run
-
-1. Open the WhisPTT panel in the Quick Access Menu.
-2. **Save API key** — your OpenAI key (stored in the plugin's settings dir, never
-   committed). Get one at platform.openai.com.
-3. **PTT key → tap to change**, then press the key you bound in Steam Input.
-4. Flip **Enabled** on. Hold the key, speak, release.
-
-## ⚠️ Validate on hardware — the risky bits
-
-Two things only real Deck hardware can confirm (everything else is deterministic):
-
-1. **Keystroke injection vs Steam Input.** Injected uinput keys land in games
-   (SDL/evdev read them fine). Steam's own CEF search boxes can be flaky, and
-   Steam Input *might* try to remap our virtual keyboard. If typing misbehaves,
-   switch **Output → Copy to clipboard** as a fallback (set in the panel).
-2. **PTT detection latency / double-fire.** Reading is passive, so the game still
-   sees the key — dedicate a binding you don't otherwise use in-game.
-
-Watch the backend log while testing:
-
-```bash
-tail -f ~/homebrew/logs/WhisPTT/plugin.log   # path may vary by Decky version
-```
-
-## Notes / limitations
-
-- Injection is US-layout, printable ASCII. Non-ASCII characters are skipped
-  (uinput is keycode-based). Fine for English; clipboard mode preserves anything.
-- The listener reads all input devices while loaded (inherent to a global PTT).
-- Needs network + an OpenAI key. `gpt-4o-mini-transcribe` is the cheap default.
+**Architecture:** the backend runs as root (`flags: ["root"]`) and uses the
+kernel input layer directly — `evdev_listener.py` reads `/dev/input/event*` for
+PTT detection (keyboard keys, and gamepad `BTN_*`/triggers off Steam's virtual
+X-Box 360 pad), and `uinput_kbd.py` injects keystrokes via `/dev/uinput`. Both
+are hand-rolled with `struct` + `ioctl`, so there are no third-party Python deps.
+`recorder.py` captures the mic (`pw-record`/`parecord`/`arecord`) and
+`transcriber.py` POSTs to OpenAI with a stdlib multipart request.

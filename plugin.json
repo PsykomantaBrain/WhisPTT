@@ -4,8 +4,8 @@
   "flags": ["root"],
   "api_version": 1,
   "publish": {
-    "tags": ["voice", "input", "productivity"],
-    "description": "Push-to-talk voice dictation for the Steam Deck. Hold your PTT button, speak, and your words are typed into the focused field via the OpenAI Whisper API.",
-    "image": "https://raw.githubusercontent.com/CHANGEME/whisptt/main/assets/thumbnail.png"
+    "tags": ["voice", "dictation", "input", "productivity"],
+    "description": "Push-to-talk voice dictation. Hold a controller combo or key, speak, and your words are typed into the focused field via OpenAI Whisper. Works in-game and in the Steam UI. Requires an OpenAI API key.",
+    "image": "https://raw.githubusercontent.com/PsykomantaBrain/WhisPTT/master/assets/thumbnail.png"
   }
 }
