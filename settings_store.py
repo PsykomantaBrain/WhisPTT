@@ -29,6 +29,13 @@ class Settings:
         if d:
             os.makedirs(d, exist_ok=True)
         tmp = self.path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
+        # This file holds the API key — create it owner-only (0600) from the
+        # start so the secret is never world-readable, even briefly.
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(self.data, f, indent=2)
         os.replace(tmp, self.path)
+        try:
+            os.chmod(self.path, 0o600)
+        except OSError:
+            pass

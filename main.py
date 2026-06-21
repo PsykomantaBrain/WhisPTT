@@ -118,9 +118,13 @@ class Plugin:
         self.busy = True
         try:
             self._set_status("transcribing")
-            path = self.recorder.stop()
+            rec = self.recorder
             self.recorder = None
+            path = rec.stop()
             if not path or not os.path.exists(path) or os.path.getsize(path) < 1024:
+                if rec.last_error:
+                    decky.logger.warning("recorder produced no audio; stderr: %s",
+                                         rec.last_error)
                 self._set_status("idle (nothing recorded)")
                 return
             api_key = self.settings.get("api_key")

@@ -22,6 +22,27 @@ OPENAI_PATH = "/v1/audio/transcriptions"
 
 MODELS = ["gpt-4o-mini-transcribe", "gpt-4o-transcribe", "whisper-1"]
 
+# Decky's bundled Python often can't locate the system trust store via
+# OpenSSL's compiled-in paths, so HTTPS cert verification fails. Point it at
+# the OS CA bundle explicitly.
+_CA_CANDIDATES = [
+    "/etc/ssl/certs/ca-certificates.crt",  # Arch / SteamOS, Debian/Ubuntu
+    "/etc/pki/tls/certs/ca-bundle.crt",    # Fedora / RHEL
+    "/etc/ssl/cert.pem",                   # fallback
+]
+
+
+def _ssl_context():
+    ctx = ssl.create_default_context()
+    for ca in _CA_CANDIDATES:
+        if os.path.exists(ca):
+            try:
+                ctx.load_verify_locations(cafile=ca)
+            except OSError:
+                pass
+            break
+    return ctx
+
 
 def _build_multipart(fields, file_field, filename, file_bytes):
     boundary = "----WhisPTT" + uuid.uuid4().hex
@@ -67,7 +88,7 @@ def transcribe(audio_path, api_key, model="gpt-4o-mini-transcribe",
     }
 
     conn = http.client.HTTPSConnection(
-        OPENAI_HOST, timeout=timeout, context=ssl.create_default_context()
+        OPENAI_HOST, timeout=timeout, context=_ssl_context()
     )
     try:
         conn.request("POST", OPENAI_PATH, body=body, headers=headers)
