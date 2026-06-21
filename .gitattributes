@@ -1,0 +1,4 @@
+# This plugin runs on SteamOS (Linux). Keep LF endings everywhere so files
+# authored on Windows deploy cleanly.
+* text=auto eol=lf
+*.png binary

@@ -1,0 +1,11 @@
+{
+  "name": "WhisPTT",
+  "author": "Felipe Falanghe",
+  "flags": ["root"],
+  "api_version": 1,
+  "publish": {
+    "tags": ["voice", "input", "productivity"],
+    "description": "Push-to-talk voice dictation for the Steam Deck. Hold your PTT button, speak, and your words are typed into the focused field via the OpenAI Whisper API.",
+    "image": "https://raw.githubusercontent.com/CHANGEME/whisptt/main/assets/thumbnail.png"
+  }
+}

@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.log
+__pycache__/
+*.pyc
+.DS_Store
+*.tmp
+
+# Local secrets / settings dumps — never commit
+settings.json
+whisptt.json
