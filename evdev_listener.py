@@ -5,6 +5,7 @@ press/release no matter what's focused. Reading is passive: it does not consume
 the event, so the game / Steam still see the key too. Requires root.
 """
 
+import fcntl
 import glob
 import os
 import select
@@ -17,6 +18,25 @@ EV_ABS = 0x03
 # Same input_event layout as uinput_kbd; x86_64 Linux (timeval = 2x long).
 _EVENT_FMT = "llHHi"
 _EVENT_SIZE = struct.calcsize(_EVENT_FMT)  # 24
+
+# Our own injected keyboard (uinput_kbd's device name) — skip it when scanning,
+# or we'd read the keystrokes we type and false-trigger.
+OWN_DEVICE_PREFIX = "WhisPTT"
+_NAME_LEN = 256
+
+
+def _eviocgname(length):
+    # EVIOCGNAME(len) = _IOR('E', 0x06, len)
+    return (2 << 30) | (length << 16) | (ord("E") << 8) | 0x06
+
+
+def _device_name(fd):
+    try:
+        buf = bytearray(_NAME_LEN)
+        fcntl.ioctl(fd, _eviocgname(_NAME_LEN), buf)
+        return bytes(buf).split(b"\x00", 1)[0].decode("utf-8", "replace")
+    except (OSError, OverflowError, ValueError):
+        return ""
 
 
 class EvdevListener:
@@ -80,15 +100,6 @@ class EvdevListener:
             self._thread.join(timeout=2)
         self._close()
 
-    def _open_devices(self):
-        fds = {}
-        for path in sorted(glob.glob("/dev/input/event*")):
-            try:
-                fds[os.open(path, os.O_RDONLY | os.O_NONBLOCK)] = path
-            except OSError:
-                continue  # some nodes need extra perms / are busy; skip them
-        return fds
-
     def _close(self):
         for fd in list(self._fds):
             try:
@@ -98,24 +109,67 @@ class EvdevListener:
         self._fds = {}
         self._bufs = {}
 
-    def _run(self):
-        self._fds = self._open_devices()
-        if not self._fds:
-            return
-        self._bufs = {fd: b"" for fd in self._fds}
-        while not self._stop.is_set():
+    def _drop_fd(self, fd):
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        self._fds.pop(fd, None)
+        self._bufs.pop(fd, None)
+
+    def _rescan(self):
+        """(Re)open input devices.
+
+        Steam Input creates (and tears down / recreates) its virtual gamepad
+        lazily, around game sessions — long after the plugin loads at Decky
+        boot. So we can't enumerate just once; we keep picking up devices that
+        appear at runtime. Our own injected keyboard is skipped by name to
+        avoid reading the keystrokes we type.
+        """
+        current = set(glob.glob("/dev/input/event*"))
+        open_paths = set(self._fds.values())
+        for path in sorted(current - open_paths):
             try:
-                ready, _, _ = select.select(list(self._fds), [], [], 0.2)
+                fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+            except OSError:
+                continue  # busy / no perms; retry next scan
+            if _device_name(fd).startswith(OWN_DEVICE_PREFIX):
+                os.close(fd)
+                continue
+            self._fds[fd] = path
+            self._bufs[fd] = b""
+        # Drop descriptors whose device path has disappeared.
+        for fd, path in list(self._fds.items()):
+            if path not in current:
+                self._drop_fd(fd)
+
+    def _run(self):
+        self._fds = {}
+        self._bufs = {}
+        cycles = 0
+        while not self._stop.is_set():
+            if cycles % 5 == 0:          # rescan ~1/s (0.2s select * 5)
+                self._rescan()
+            cycles += 1
+            fds = list(self._fds)
+            if not fds:
+                if self._stop.wait(0.2):
+                    break
+                continue
+            try:
+                ready, _, _ = select.select(fds, [], [], 0.2)
             except (OSError, ValueError):
-                break
+                self._rescan()           # a fd went bad; let rescan clean up
+                continue
             for fd in ready:
                 try:
                     chunk = os.read(fd, _EVENT_SIZE * 64)
                 except OSError:
+                    self._drop_fd(fd)    # device vanished; reopened next scan
                     continue
                 if not chunk:
                     continue
-                data = self._bufs[fd] + chunk
+                data = self._bufs.get(fd, b"") + chunk
                 n = len(data) - (len(data) % _EVENT_SIZE)
                 for i in range(0, n, _EVENT_SIZE):
                     _, _, etype, code, value = struct.unpack(
