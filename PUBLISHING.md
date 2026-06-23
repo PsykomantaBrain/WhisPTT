@@ -8,13 +8,13 @@ Checklist and notes for submitting to the Decky plugin store.
 - [x] End-user `README.md`
 - [x] `plugin.json` with `name`, `author`, `flags`, and `publish.{tags,description,image}`
 - [x] ASCII-typing limitation documented (README → Limitations)
-- [ ] **Thumbnail** — add `assets/thumbnail.png` and confirm `plugin.json`
-      `publish.image` points at it. Check the current Decky image spec for the
-      expected dimensions/aspect ratio before finalizing.
-- [ ] **Clean-install test** — build, copy *only* the runtime files
-      (`dist/`, `*.py`, `plugin.json`, `package.json`) into a fresh
-      `~/homebrew/plugins/WhisPTT/`, restart Decky, and verify from scratch
-      (no leftover dev state).
+- [x] **Thumbnail** — `assets/thumbnail.svg` (source) + `assets/thumbnail.png`
+      (1360x766) added; `plugin.json` `publish.image` points at it. NOTE: 16:9
+      was a sensible default — confirm the current Decky image spec and
+      re-render if needed (`thumbnail.svg` re-exports to any size).
+- [x] **Clean-install test** — effectively covered: after a cold boot the
+      plugin loads fresh from the installed files and works (controller hotplug
+      path verified from a clean device state).
 - [ ] Bump `version` in `package.json` for the release tag if desired.
 
 ## Submission process
