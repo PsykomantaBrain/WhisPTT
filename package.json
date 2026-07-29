@@ -1,6 +1,6 @@
 {
   "name": "whisptt",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Push-to-talk voice dictation for Steam Deck using the OpenAI Whisper API.",
   "type": "module",
   "scripts": {
