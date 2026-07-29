@@ -4,8 +4,7 @@ Push-to-talk voice dictation for the Steam Deck. Hold a button, speak, release �
 your words are transcribed by OpenAI Whisper and typed straight into the focused
 text field: game chat, search boxes, anything you can type into.
 
-<!-- TODO: add assets/thumbnail.png and uncomment -->
-<!-- ![WhisPTT](assets/thumbnail.png) -->
+![WhisPTT](assets/thumbnail.png)
 
 ## Features
 
@@ -31,9 +30,22 @@ text field: game chat, search boxes, anything you can type into.
   very cheap — a fraction of a cent per dictation with `gpt-4o-mini-transcribe`.
 - A network connection (audio is sent to OpenAI to transcribe).
 
+## Install
+
+WhisPTT is installed manually (it is not in the Decky store):
+
+1. Grab the latest `WhisPTT.zip` from the
+   [releases page](https://github.com/PsykomantaBrain/WhisPTT/releases/latest).
+2. In the Decky settings (gear icon in the Quick Access Menu), enable
+   **Developer mode**, then under **Developer → Manual plugin install** paste
+   the zip URL:
+   `https://github.com/PsykomantaBrain/WhisPTT/releases/latest/download/WhisPTT.zip`
+3. Alternatively, extract the zip to `~/homebrew/plugins/` yourself and restart
+   Decky (see [Development](#development)).
+
 ## Setup
 
-1. Install WhisPTT (Decky store, or manually — see [Development](#development)).
+1. Install WhisPTT (see [Install](#install)).
 2. Open the **WhisPTT** panel in the Quick Access Menu.
 3. **Save your OpenAI API key.**
 4. Bind a trigger:

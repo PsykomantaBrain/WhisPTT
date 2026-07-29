@@ -2,6 +2,19 @@
 
 Checklist and notes for submitting to the Decky plugin store.
 
+## ⚠️ Status: on hold — store AI policy (2026-07-29)
+
+The Decky wiki's [submission rules](https://wiki.deckbrew.xyz/en/plugin-dev/submitting-plugins)
+("AI, LLMs and so on") state they do not accept plugins using LLM-based code,
+rejected outright with no appeals. WhisPTT is affected on both counts: much of
+the code is LLM-assisted, and the default transcription models
+(`gpt-4o-*-transcribe`) are LLM-based.
+
+Plan: ask in the SteamDeckHomebrew Discord whether the plugin is acceptable
+before opening any PR. Fallback: distribute via GitHub releases — Decky's
+*Manual plugin install* takes a release zip, and the wiki explicitly calls
+manual install fine.
+
 ## Pre-submission checklist
 
 - [x] `LICENSE` (BSD-3-Clause)

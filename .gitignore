@@ -5,6 +5,7 @@ __pycache__/
 *.pyc
 .DS_Store
 *.tmp
+.claude/
 
 # Local secrets / settings dumps — never commit
 settings.json
