@@ -17,8 +17,9 @@ text field: game chat, search boxes, anything you can type into.
   - **Keyboard / touchscreen** — works in the **Steam UI**: Quick Access Menu,
     Gaming Mode menus, even the on-screen keyboard.
   - **USB keyboard when docked** — just bind a normal key.
-- **In-field status caption** — shows `[recording...]` while you talk, then
-  replaces it with your transcription.
+- **In-field status caption** — types a customizable placeholder (default `...`)
+  while you talk, then replaces it with your transcription. Kept deliberately
+  inconspicuous by default in case you hit send before it clears.
 - **Type into the field, or copy to clipboard.**
 - **Model & language choice** — defaults to `gpt-4o-mini-transcribe` (fast, cheap).
 

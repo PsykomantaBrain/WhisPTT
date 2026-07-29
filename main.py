@@ -39,14 +39,9 @@ DEFAULTS = {
     "mic_device": "",          # "" = default source
     "prompt": "",              # optional vocabulary bias
     "inject_status": True,     # type a placeholder caption while recording
+    "status_caption": "...",   # in-field caption; plain default so an accidental send looks harmless
     "ptt_gamepad_combo": [],   # gamepad button names; PTT = hold all together
 }
-
-# Shown in the focused field while recording, then backspaced away and
-# replaced by the transcription. Must be ASCII (so nothing is silently
-# skipped, which would throw off the backspace count) and contain no newline
-# (our typer maps "\n" to Enter, which would submit it).
-STATUS_CAPTION = "[recording...]"
 
 # Steam's virtual X-Box 360 pad button codes (evdev BTN_*), confirmed on a
 # Steam Deck. The chord is read passively off the pad, so pick a combo no game
@@ -149,11 +144,13 @@ class Plugin:
             self._caption_chars = 0
             # Show an in-field caption so you get feedback without the QAM open.
             # Only meaningful when we're typing the result into the field.
-            if (self.settings.get("inject_status")
+            caption = self._status_caption()
+            if (caption
+                    and self.settings.get("inject_status")
                     and self.settings.get("output_mode") == "type"):
                 try:
-                    skipped = self._ensure_kbd().type_text(STATUS_CAPTION)
-                    self._caption_chars = len(STATUS_CAPTION) - skipped
+                    skipped = self._ensure_kbd().type_text(caption)
+                    self._caption_chars = len(caption) - skipped
                 except Exception:  # noqa: BLE001
                     decky.logger.exception("status caption inject failed")
                     self._caption_chars = 0
@@ -171,7 +168,7 @@ class Plugin:
         self.busy = True
         # Capture the caption length up front; clear it before typing the
         # result, and the `finally` mops it up on any error/early-return so we
-        # never strand "[recording...]" in the field.
+        # never strand the caption in the field.
         caption_n = self._caption_chars
         self._caption_chars = 0
         try:
@@ -259,6 +256,11 @@ class Plugin:
                 p.communicate(text.encode("utf-8"))
                 return
         decky.logger.warning("no clipboard tool (wl-copy/xclip) found")
+
+    def _status_caption(self):
+        # Newlines map to Enter in the typer, which would submit the field.
+        caption = str(self.settings.get("status_caption") or "")
+        return caption.replace("\r", "").replace("\n", "")
 
     def _set_status(self, status):
         self.status = status

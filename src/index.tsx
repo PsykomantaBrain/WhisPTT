@@ -22,6 +22,7 @@ interface BackendSettings {
   mic_device: string;
   prompt: string;
   inject_status: boolean;
+  status_caption: string;
   ptt_gamepad_combo: string[];
   has_api_key: boolean;
 }
@@ -238,12 +239,21 @@ function Content() {
         <PanelSectionRow>
           <ToggleField
             label="Type status caption"
-            description="Shows [recording...] in the field, then replaces it with the transcription (type mode only)"
+            description="Shows the caption below in the field while recording, then replaces it with the transcription (type mode only)"
             checked={s.inject_status}
             disabled={s.output_mode !== "type"}
             onChange={(v) => update("inject_status", v)}
           />
         </PanelSectionRow>
+        {s.inject_status && s.output_mode === "type" ? (
+          <PanelSectionRow>
+            <TextField
+              label="Status caption"
+              value={s.status_caption}
+              onChange={(e) => update("status_caption", e.target.value)}
+            />
+          </PanelSectionRow>
+        ) : null}
         <PanelSectionRow>
           <TextField
             label="Language (ISO code, blank = auto)"
