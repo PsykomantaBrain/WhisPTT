@@ -42,8 +42,9 @@ const beginCapturePtt = callable<[number?], number | null>("begin_capture_ptt");
 const getStatus = callable<[], Status>("get_status");
 
 const MODELS = [
-  { label: "GPT-4o mini transcribe (fast, cheap)", data: "gpt-4o-mini-transcribe" },
-  { label: "GPT-4o transcribe (best accuracy)", data: "gpt-4o-transcribe" },
+  { label: "GPT transcribe (recommended)", data: "gpt-transcribe" },
+  { label: "GPT-4o mini transcribe", data: "gpt-4o-mini-transcribe" },
+  { label: "GPT-4o transcribe", data: "gpt-4o-transcribe" },
   { label: "Whisper-1 (legacy)", data: "whisper-1" },
 ];
 const OUTPUT_MODES = [

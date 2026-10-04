@@ -5,10 +5,11 @@ installs under decky-loader's bundled Python.
 
 Endpoint: POST https://api.openai.com/v1/audio/transcriptions
 Models:
-  - gpt-4o-mini-transcribe : cheap, fast, accurate (default for short PTT clips)
-  - gpt-4o-transcribe      : highest accuracy
+  - gpt-transcribe         : default; OpenAI's current recommendation
+  - gpt-4o-mini-transcribe
+  - gpt-4o-transcribe
   - whisper-1              : legacy; supports verbose_json / srt / vtt
-All three accept response_format=json, which is all we need.
+All accept response_format=json, which is all we need.
 """
 
 import http.client
@@ -20,7 +21,7 @@ import uuid
 OPENAI_HOST = "api.openai.com"
 OPENAI_PATH = "/v1/audio/transcriptions"
 
-MODELS = ["gpt-4o-mini-transcribe", "gpt-4o-transcribe", "whisper-1"]
+MODELS = ["gpt-transcribe", "gpt-4o-mini-transcribe", "gpt-4o-transcribe", "whisper-1"]
 
 # Decky's bundled Python often can't locate the system trust store via
 # OpenSSL's compiled-in paths, so HTTPS cert verification fails. Point it at
@@ -67,7 +68,7 @@ def _build_multipart(fields, file_field, filename, file_bytes):
     return boundary, b"".join(parts)
 
 
-def transcribe(audio_path, api_key, model="gpt-4o-mini-transcribe",
+def transcribe(audio_path, api_key, model="gpt-transcribe",
                language=None, prompt=None, timeout=60):
     with open(audio_path, "rb") as f:
         audio = f.read()

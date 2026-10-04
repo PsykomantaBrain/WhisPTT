@@ -1,7 +1,7 @@
 # WhisPTT
 
 Push-to-talk voice dictation for the Steam Deck. Hold a button, speak, release —
-your words are transcribed by OpenAI Whisper and typed straight into the focused
+your words are transcribed by OpenAI's speech-to-text API and typed straight into the focused
 text field: game chat, search boxes, anything you can type into.
 
 ![WhisPTT](assets/thumbnail.png)
@@ -20,14 +20,14 @@ text field: game chat, search boxes, anything you can type into.
   while you talk, then replaces it with your transcription. Kept deliberately
   inconspicuous by default in case you hit send before it clears.
 - **Type into the field, or copy to clipboard.**
-- **Model & language choice** — defaults to `gpt-4o-mini-transcribe` (fast, cheap).
+- **Model & language choice** — defaults to `gpt-transcribe` (OpenAI's current recommendation, and its cheapest).
 
 ## Requirements
 
 - [Decky Loader](https://decky.xyz) on your Steam Deck.
 - An **OpenAI API key** with billing enabled (platform.openai.com). The API is
   pay-as-you-go and **separate from any ChatGPT subscription**. Transcription is
-  very cheap — a fraction of a cent per dictation with `gpt-4o-mini-transcribe`.
+  very cheap — a fraction of a cent per dictation with `gpt-transcribe`.
 - A network connection (audio is sent to OpenAI to transcribe).
 
 ## Install

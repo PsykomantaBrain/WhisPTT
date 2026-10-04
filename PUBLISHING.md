@@ -8,7 +8,7 @@ The Decky wiki's [submission rules](https://wiki.deckbrew.xyz/en/plugin-dev/subm
 ("AI, LLMs and so on") state they do not accept plugins using LLM-based code,
 rejected outright with no appeals. WhisPTT is affected on both counts: much of
 the code is LLM-assisted, and the default transcription models
-(`gpt-4o-*-transcribe`) are LLM-based.
+(`gpt-transcribe`, `gpt-4o-*-transcribe`) are LLM-based.
 
 Plan: ask in the SteamDeckHomebrew Discord whether the plugin is acceptable
 before opening any PR. Fallback: distribute via GitHub releases — Decky's

@@ -32,7 +32,7 @@ from uinput_kbd import UInputKeyboard  # noqa: E402
 DEFAULTS = {
     "enabled": False,
     "api_key": "",
-    "model": "gpt-4o-mini-transcribe",
+    "model": "gpt-transcribe",
     "language": "",            # "" = auto-detect
     "ptt_keycode": None,
     "output_mode": "type",     # "type" | "clipboard"
