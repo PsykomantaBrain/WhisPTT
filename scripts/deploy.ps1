@@ -81,7 +81,10 @@ $cmd = @(
   "sudo mv '$remoteTmp' '$dest'",
   "sudo chown -R root:root '$dest'",
   "sudo chmod -R a+rX '$dest'",      # root-owned but world-readable (match stock plugins; Dolphin can browse)
-  "sudo systemctl restart plugin_loader"
+  # Decky's unit has KillMode=process: a plain restart kills only the bootstrap
+  # PID, the real loader survives holding port 1337, and the new one crash-loops
+  # until systemd hits the start limit. Kill the whole cgroup before starting.
+  "sudo sh -c 'systemctl stop plugin_loader; systemctl kill -s KILL plugin_loader; systemctl reset-failed plugin_loader; systemctl start plugin_loader; sleep 2; systemctl is-active plugin_loader'"
 ) -join " && "
 Write-Host "==> installing on Deck + restarting Decky (enter sudo password)..." -ForegroundColor Cyan
 ssh -t $Deck $cmd
